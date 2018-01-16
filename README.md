@@ -1,1 +1,1 @@
-Autoencoder playground using the MNIST dataset
+Convolutional autoencoder playground using the MNIST dataset
