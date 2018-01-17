@@ -1,3 +1,4 @@
+# %% Import modules
 import numpy as np
 import matplotlib.pyplot as plt
 from tensorflow.examples.tutorials.mnist import input_data
@@ -6,7 +7,9 @@ import tensorflow as tf
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 import pickle
+# %%
 
+# %% Prepare data
 mnist = input_data.read_data_sets("MNIST_data/", reshape=False)
 X_train, y_train = mnist.train.images, mnist.train.labels
 X_validation, y_validation = mnist.validation.images, mnist.validation.labels
@@ -24,6 +27,7 @@ print("Test Set:       {} samples".format(len(X_test)))
 # Get 10 unique numbers from the validation set
 unique_labels, indices = np.unique(y_validation, return_index=True)
 unique_x = X_validation[indices]
+# %%
 
 
 # Function that shows input images
@@ -56,9 +60,9 @@ def linear_interp(a, b, step = 10):
 
     return cc
 
-
-unique_x.shape
+# Show unique numbers from the dataset
 show_numbers(unique_x)
+
 
 # %% Build the model
 # Arguments used for tf.truncated_normal, randomly defines variables for
@@ -146,7 +150,7 @@ lsp = tf.placeholder(tf.float32, (None, 2, 2, 15))
 decoder = adecoder(lsp)
 
 cost = tf.reduce_sum(tf.pow(model - x, 2))  # minimize squared error
-train_op = tf.train.AdamOptimizer(0.0005).minimize(cost)  # construct an optimizer
+train_op = tf.train.AdamOptimizer(0.0001).minimize(cost)  # construct an optimizer
 
 sess = tf.Session()
 saver = tf.train.Saver()
@@ -161,7 +165,7 @@ saver.restore(sess, "./model/model.ckpt")
 # %% Train the model
 EPOCHS = 250
 BATCH_SIZE = 256
-sess.run(tf.global_variables_initializer())
+# sess.run(tf.global_variables_initializer())
 print("Training...")
 for i in range(EPOCHS):
     X_train, y_train = shuffle(X_train, y_train)
@@ -192,7 +196,7 @@ show_numbers(sess.run(decoder, feed_dict={lsp: lin_intrp}))
 lin_intrp = linear_interp(lspace[3], lspace[8], 10)
 show_numbers(sess.run(decoder, feed_dict={lsp: lin_intrp}))
 
-lin_intrp = linear_interp(lspace[9], lspace[7], 10)
+lin_intrp = linear_interp(lspace[9], lspace[5], 10)
 show_numbers(sess.run(decoder, feed_dict={lsp: lin_intrp}))
 # %%
 
@@ -203,18 +207,18 @@ decomp_y = y_train[rndperm]
 decomp_x.shape
 decomp_y.shape
 
-tsne = TSNE(n_components=2, perplexity=50, n_iter=500)
+tsne = TSNE(n_components=2, perplexity=75, n_iter=750)
 tsne_results = tsne.fit_transform(decomp_x)
 
 pca_results = PCA().fit_transform(decomp_x)
 
 # Save TSNE and PCA
 with open('tsne-pca.pkl', 'wb') as handle:
-    pickle.dump((tsne_results, pca_results), handle, protocol=pickle.HIGHEST_PROTOCOL)
+    pickle.dump((tsne_results, pca_results, decomp_x, decomp_y), handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 # Load TSNE and PCA
 with open('tsne-pca.pkl', 'rb') as handle:
-    tsne_results, pca_results = pickle.load(handle)
+    tsne_results, pca_results, decomp_x, decomp_y = pickle.load(handle)
 
 # %%
 f, ax = plt.subplots(1, 2, figsize=(15,5))
@@ -236,11 +240,11 @@ pca_results_2 = PCA().fit_transform(decomp_x)
 
 # Save TSNE_2 and PCA_2
 with open('tsne-pca-2.pkl', 'wb') as handle:
-    pickle.dump((tsne_results_2, pca_results_2), handle, protocol=pickle.HIGHEST_PROTOCOL)
+    pickle.dump((tsne_results_2, pca_results_2, decomp_x, decomp_y), handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 # Load TSNE_2 and PCA_2
 with open('tsne-pca-2.pkl', 'rb') as handle:
-    tsne_results_2, pca_results_2 = pickle.load(handle)
+    tsne_results_2, pca_results_2, decomp_x, decomp_y = pickle.load(handle)
 
 # %%
 f, ax = plt.subplots(1, 2, figsize=(15,5))
