@@ -65,8 +65,7 @@ show_numbers(unique_x)
 
 
 # %% Build the model
-# Arguments used for tf.truncated_normal, randomly defines variables for
-# the weights and biases for each layer
+# Arguments used for tf.truncated_normal, the weights and biases initializer
 mu = 0
 sigma = 0.1
 
@@ -116,20 +115,20 @@ ct3_b = tf.Variable(tf.zeros(1))
 
 
 def adecoder(ls):
-    # Upsampling
+    # Up-sampling
     batch_internal = tf.shape(ls)[0]
     conv_t_1 = tf.nn.conv2d_transpose(ls, ct1_W, [batch_internal, 7, 7, 10], [1, 3, 3, 1], 'VALID') + ct1_b
 
     # Activation.
     conv_t_1 = tf.nn.tanh(conv_t_1)
 
-    # Upsampling
+    # Up-sampling
     conv_t_2 = tf.nn.conv2d_transpose(conv_t_1, ct2_W, [batch_internal, 14, 14, 5], c1_strides, padding) + ct2_b
 
     # Activation.
     conv_t_2 = tf.nn.tanh(conv_t_2)
 
-    # Upsampling
+    # Up-sampling
     conv_t_3 = tf.nn.conv2d_transpose(conv_t_2, ct3_W, [batch_internal, 28, 28, 1], c1_strides, padding) + ct3_b
 
     # Activation.
@@ -165,7 +164,7 @@ saver.restore(sess, "./model/model.ckpt")
 # %% Train the model
 EPOCHS = 250
 BATCH_SIZE = 256
-# sess.run(tf.global_variables_initializer())
+sess.run(tf.global_variables_initializer())
 print("Training...")
 for i in range(EPOCHS):
     X_train, y_train = shuffle(X_train, y_train)
@@ -185,7 +184,7 @@ save_path = saver.save(sess, "./model/model.ckpt")
 print("Model saved in file: %s" % save_path)
 # %%
 
-# %% Latents space linear interpolation
+# %% Latent space linear interpolation
 m, lspace = sess.run([model, encoder], feed_dict={x: unique_x})
 lin_intrp = linear_interp(lspace[0], lspace[5], 10)
 show_numbers(sess.run(decoder, feed_dict={lsp: lin_intrp}))
