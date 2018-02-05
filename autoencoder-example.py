@@ -32,7 +32,6 @@ unique_x = X_validation[indices]
 
 # Function that shows input images
 def show_numbers(images):
-    plt.figure(figsize=(200, 200))
     f, ax = plt.subplots(1, len(images))
 
     for i in range(len(images)):
@@ -42,13 +41,14 @@ def show_numbers(images):
     plt.show()
 
 
-def show_numbers_ns(images):
-    f, ax = plt.subplots(1, len(images))
+def show_numbers_ls(lspace):
+    ls_images = np.swapaxes(lspace,0,2)
+    f, ax = plt.subplots(1, len(ls_images))
 
-    for i in range(len(images)):
+    for i in range(len(ls_images)):
         ax[i].set_xticks([])
         ax[i].set_yticks([])
-        ax[i].imshow(images[i], cmap="gray")
+        ax[i].imshow(ls_images[i], cmap="gray")
     plt.show()
 
 
@@ -182,6 +182,18 @@ for i in range(EPOCHS):
 # %% Save tf model
 save_path = saver.save(sess, "./model/model.ckpt")
 print("Model saved in file: %s" % save_path)
+# %%
+
+
+# %% Latent space visualization
+print(" latent space: 0")
+show_numbers_ls(lspace[0])
+
+print(" latent space: 3")
+show_numbers_ls(lspace[3])
+
+print(" latent space: 9")
+show_numbers_ls(lspace[9])
 # %%
 
 # %% Latent space linear interpolation
