@@ -12,21 +12,15 @@ import pickle
 # %% Prepare data
 mnist = input_data.read_data_sets("MNIST_data/", reshape=False)
 X_train, y_train = mnist.train.images, mnist.train.labels
-X_validation, y_validation = mnist.validation.images, mnist.validation.labels
-X_test, y_test = mnist.test.images, mnist.test.labels
 
 assert(len(X_train) == len(y_train))
-assert(len(X_validation) == len(y_validation))
-assert(len(X_test) == len(y_test))
 
 print("Image Shape: {}".format(X_train[0].shape))
 print("Training Set:   {} samples".format(len(X_train)))
-print("Validation Set: {} samples".format(len(X_validation)))
-print("Test Set:       {} samples".format(len(X_test)))
 
 # Get 10 unique numbers from the validation set
-unique_labels, indices = np.unique(y_validation, return_index=True)
-unique_x = X_validation[indices]
+unique_labels, indices = np.unique(y_train, return_index=True)
+unique_x = X_train[indices]
 # %%
 
 
@@ -42,19 +36,15 @@ def show_numbers(images):
 
 
 def show_numbers_ls(lspace):
-    ls_images = np.swapaxes(lspace,0,2)
-    f, ax = plt.subplots(1, len(ls_images))
-
-    for i in range(len(ls_images)):
-        ax[i].set_xticks([])
-        ax[i].set_yticks([])
-        ax[i].imshow(ls_images[i], cmap="gray")
+    plt.imshow([lspace], cmap="gray")
+    plt.xticks([])
+    plt.yticks([])
     plt.show()
 
 
 def linear_interp(a, b, step = 10):
     assert a.shape == b.shape
-    cc = np.zeros(shape=[step, a.shape[0], a.shape[1], a.shape[2]])
+    cc = np.zeros(shape=[step, a.shape[0]])
     for c, i in zip(np.linspace(0, 1, step), range(len(cc))):
         cc[i] = a + (b - a) * c
 
@@ -65,21 +55,26 @@ show_numbers(unique_x)
 
 
 # %% Build the model
+n_latent = 32
+
 # Arguments used for tf.truncated_normal, the weights and biases initializer
-mu = 0
-sigma = 0.1
+mu_init = 0
+sigma_init = 0.1
 
 c1_strides = [1, 2, 2, 1]
 padding = 'SAME'
 
-c1_W = tf.Variable(tf.truncated_normal([3, 3, 1, 5], mean=mu, stddev=sigma))
-c1_b = tf.Variable(tf.zeros(5))
+c1_W = tf.Variable(tf.truncated_normal([3, 3, 1, 16], mean=mu_init, stddev=sigma_init))
+c1_b = tf.Variable(tf.zeros(16))
 
-c2_W = tf.Variable(tf.truncated_normal([3, 3, 5, 10], mean=mu, stddev=sigma))
-c2_b = tf.Variable(tf.zeros(10))
+c2_W = tf.Variable(tf.truncated_normal([3, 3, 16, 32], mean=mu_init, stddev=sigma_init))
+c2_b = tf.Variable(tf.zeros(32))
 
-c3_W = tf.Variable(tf.truncated_normal([3, 3, 10, 15], mean=mu, stddev=sigma))
-c3_b = tf.Variable(tf.zeros(15))
+c3_W = tf.Variable(tf.truncated_normal([3, 3, 32, 64], mean=mu_init, stddev=sigma_init))
+c3_b = tf.Variable(tf.zeros(64))
+
+de_W = tf.Variable(tf.truncated_normal(shape = (3*3*64, n_latent), mean=mu_init, stddev=sigma_init))
+de_b = tf.Variable(tf.zeros(n_latent))
 
 
 def aencoder(x):
@@ -96,34 +91,47 @@ def aencoder(x):
     conv2 = tf.nn.tanh(conv2)
 
     # Layer 3: Convolutional. Output = 10x10x10.
-    conv3 = tf.nn.conv2d(conv2, c3_W, [1, 3, 3, 1], 'VALID') + c3_b
+    conv3 = tf.nn.conv2d(conv2, c3_W, [1, 2, 2, 1], 'VALID') + c3_b
 
-    # Activation.
-    latent_space = tf.nn.tanh(conv3)
+    conv3 = tf.nn.tanh(conv3)
+
+    # Dense layer
+    conv3_f = tf.contrib.layers.flatten(conv3)
+    latent_space  = tf.matmul(conv3_f, de_W) + de_b
 
     return latent_space
 
 
-ct1_W = tf.Variable(tf.truncated_normal([3, 3, 10, 15], mean=mu, stddev=sigma))
-ct1_b = tf.Variable(tf.zeros(10))
+ct1_W = tf.Variable(tf.truncated_normal([3, 3, 32, 64], mean=mu_init, stddev=sigma_init))
+ct1_b = tf.Variable(tf.zeros(32))
 
-ct2_W = tf.Variable(tf.truncated_normal([3, 3,  5, 10], mean=mu, stddev=sigma))
-ct2_b = tf.Variable(tf.zeros(5))
+ct2_W = tf.Variable(tf.truncated_normal([3, 3,  16, 32], mean=mu_init, stddev=sigma_init))
+ct2_b = tf.Variable(tf.zeros(16))
 
-ct3_W = tf.Variable(tf.truncated_normal([3, 3,  1, 5], mean=mu, stddev=sigma))
+ct3_W = tf.Variable(tf.truncated_normal([3, 3,  1, 16], mean=mu_init, stddev=sigma_init))
 ct3_b = tf.Variable(tf.zeros(1))
+
+dd_W = tf.Variable(tf.truncated_normal(shape = (n_latent, 3*3*64), mean=mu_init, stddev=sigma_init))
+dd_b = tf.Variable(tf.zeros(3*3*64))
 
 
 def adecoder(ls):
     # Up-sampling
     batch_internal = tf.shape(ls)[0]
-    conv_t_1 = tf.nn.conv2d_transpose(ls, ct1_W, [batch_internal, 7, 7, 10], [1, 3, 3, 1], 'VALID') + ct1_b
+
+    # Dense
+    ls = tf.matmul(ls, dd_W) + dd_b
+    ls = tf.reshape(ls, [batch_internal, 3, 3, 64])
+
+    ls = tf.nn.tanh(ls)
+
+    conv_t_1 = tf.nn.conv2d_transpose(ls, ct1_W, [batch_internal, 7, 7, 32], [1, 2, 2, 1], 'VALID') + ct1_b
 
     # Activation.
     conv_t_1 = tf.nn.tanh(conv_t_1)
 
     # Up-sampling
-    conv_t_2 = tf.nn.conv2d_transpose(conv_t_1, ct2_W, [batch_internal, 14, 14, 5], c1_strides, padding) + ct2_b
+    conv_t_2 = tf.nn.conv2d_transpose(conv_t_1, ct2_W, [batch_internal, 14, 14, 16], c1_strides, padding) + ct2_b
 
     # Activation.
     conv_t_2 = tf.nn.tanh(conv_t_2)
@@ -131,25 +139,19 @@ def adecoder(ls):
     # Up-sampling
     conv_t_3 = tf.nn.conv2d_transpose(conv_t_2, ct3_W, [batch_internal, 28, 28, 1], c1_strides, padding) + ct3_b
 
-    # Activation.
-    out = tf.nn.tanh(conv_t_3)
-
+    out = tf.nn.sigmoid(conv_t_3)
     return out
 
 
-def autoencoder(x):
-    return adecoder(aencoder(x))
-
-
 x = tf.placeholder(tf.float32, (None, 28, 28, 1))
-model = autoencoder(x)
-encoder = aencoder(x)
 
-lsp = tf.placeholder(tf.float32, (None, 2, 2, 15))
-decoder = adecoder(lsp)
+lsp = aencoder(x)
+dec_image = adecoder(lsp)
 
-cost = tf.reduce_sum(tf.pow(model - x, 2))  # minimize squared error
-train_op = tf.train.AdamOptimizer(0.0001).minimize(cost)  # construct an optimizer
+cost = tf.reduce_sum(tf.pow(dec_image - x, 2))  # minimize squared error
+
+learning_rate = tf.placeholder(tf.float32)
+train_op = tf.train.AdamOptimizer(learning_rate).minimize(cost)  # construct an optimizer
 
 sess = tf.Session()
 saver = tf.train.Saver()
@@ -159,33 +161,38 @@ print("Model built!")
 # %%
 
 # Load model
-saver.restore(sess, "./model/model.ckpt")
+saver.restore(sess, "./model/ae/model.ckpt")
 
 # %% Train the model
-EPOCHS = 250
+EPOCHS = 64
 BATCH_SIZE = 256
-sess.run(tf.global_variables_initializer())
+# sess.run(tf.global_variables_initializer())
 print("Training...")
 for i in range(EPOCHS):
     X_train, y_train = shuffle(X_train, y_train)
+    loss_per_epoch = 0
     for offset in range(0, num_examples, BATCH_SIZE):
         end = offset + BATCH_SIZE
         batch_x, batch_y = X_train[offset:end], y_train[offset:end]
-        l, _ = sess.run([cost, train_op], feed_dict={x: batch_x})
-    m, lspace = sess.run([model, encoder], feed_dict={x: unique_x})
+        l, _ = sess.run([cost, train_op], feed_dict={x: batch_x, learning_rate: 0.0001})
+        loss_per_epoch += l / (float(num_examples)/BATCH_SIZE)
+
+    m = sess.run(dec_image, feed_dict={x: unique_x})
     show_numbers(m)
     print("EPOCH {} ...".format(i+1))
-    print("Loss = {:.3f}".format(l))
+    print("Loss = {:.3f}".format(loss_per_epoch))
     print()
 # %%
 
 # %% Save tf model
-save_path = saver.save(sess, "./model/model.ckpt")
+save_path = saver.save(sess, "./model/ae/model.ckpt")
 print("Model saved in file: %s" % save_path)
 # %%
 
 
 # %% Latent space visualization
+lspace = sess.run(lsp, feed_dict={x: unique_x})
+
 print(" latent space: 0")
 show_numbers_ls(lspace[0])
 
@@ -196,19 +203,24 @@ print(" latent space: 9")
 show_numbers_ls(lspace[9])
 # %%
 
+
 # %% Latent space linear interpolation
-m, lspace = sess.run([model, encoder], feed_dict={x: unique_x})
 lin_intrp = linear_interp(lspace[0], lspace[5], 10)
-show_numbers(sess.run(decoder, feed_dict={lsp: lin_intrp}))
+show_numbers(sess.run(dec_image, feed_dict={lsp: lin_intrp}))
 
-lin_intrp = linear_interp(lspace[3], lspace[2], 10)
-show_numbers(sess.run(decoder, feed_dict={lsp: lin_intrp}))
+lin_intrp = linear_interp(lspace[3], lspace[7], 10)
+show_numbers(sess.run(dec_image, feed_dict={lsp: lin_intrp}))
 
-lin_intrp = linear_interp(lspace[3], lspace[8], 10)
-show_numbers(sess.run(decoder, feed_dict={lsp: lin_intrp}))
+lin_intrp = linear_interp(lspace[2], lspace[8], 10)
+show_numbers(sess.run(dec_image, feed_dict={lsp: lin_intrp}))
 
-lin_intrp = linear_interp(lspace[9], lspace[5], 10)
-show_numbers(sess.run(decoder, feed_dict={lsp: lin_intrp}))
+lin_intrp = linear_interp(lspace[9], lspace[6], 10)
+show_numbers(sess.run(dec_image, feed_dict={lsp: lin_intrp}))
+# %%
+
+
+# %% Latent space arithmetics
+show_numbers(sess.run(dec_image, feed_dict={lsp: np.stack((lspace[0] - lspace[8] + lspace[3], lspace[9] - lspace[1] + lspace[5]))}))
 # %%
 
 rndperm = np.random.permutation(10000)
@@ -218,17 +230,17 @@ decomp_y = y_train[rndperm]
 decomp_x.shape
 decomp_y.shape
 
-tsne = TSNE(n_components=2, perplexity=75, n_iter=750)
+tsne = TSNE(n_components=2, perplexity=32, n_iter=750)
 tsne_results = tsne.fit_transform(decomp_x)
 
 pca_results = PCA().fit_transform(decomp_x)
 
 # Save TSNE and PCA
-with open('tsne-pca.pkl', 'wb') as handle:
+with open('decomposition-data/ae-tsne-pca.pkl', 'wb') as handle:
     pickle.dump((tsne_results, pca_results, decomp_x, decomp_y), handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 # Load TSNE and PCA
-with open('tsne-pca.pkl', 'rb') as handle:
+with open('decomposition-data/ae-tsne-pca.pkl', 'rb') as handle:
     tsne_results, pca_results, decomp_x, decomp_y = pickle.load(handle)
 
 # %%
@@ -241,20 +253,20 @@ plt.show()
 
 
 # Run it through the autoencoder
-x_encoded = sess.run(encoder, feed_dict={x: X_train[rndperm]})
-decomp_x = x_encoded.reshape(len(x_encoded), 60)
-decomp_x.shape
+decomp_x = decomp_x.reshape(len(decomp_x), 28, 28, 1)
+x_encoded = sess.run(lsp, feed_dict={x: decomp_x})
+decomp_x = x_encoded.reshape(len(x_encoded), n_latent)
 
 tsne_results_2 = tsne.fit_transform(decomp_x)
 
 pca_results_2 = PCA().fit_transform(decomp_x)
 
 # Save TSNE_2 and PCA_2
-with open('tsne-pca-2.pkl', 'wb') as handle:
+with open('decomposition-data/ae-tsne-pca-2.pkl', 'wb') as handle:
     pickle.dump((tsne_results_2, pca_results_2, decomp_x, decomp_y), handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 # Load TSNE_2 and PCA_2
-with open('tsne-pca-2.pkl', 'rb') as handle:
+with open('decomposition-data/ae-tsne-pca-2.pkl', 'rb') as handle:
     tsne_results_2, pca_results_2, decomp_x, decomp_y = pickle.load(handle)
 
 # %%
