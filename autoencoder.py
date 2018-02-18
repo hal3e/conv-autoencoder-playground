@@ -1,57 +1,22 @@
 # %% Import modules
 import numpy as np
-import matplotlib.pyplot as plt
-from tensorflow.examples.tutorials.mnist import input_data
-from sklearn.utils import shuffle
 import tensorflow as tf
+import matplotlib.pyplot as plt
+from sklearn.utils import shuffle
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 import pickle
-# %%
-
-# %% Prepare data
-mnist = input_data.read_data_sets("MNIST_data/", reshape=False)
-X_train, y_train = mnist.train.images, mnist.train.labels
-
-assert(len(X_train) == len(y_train))
-
-print("Image Shape: {}".format(X_train[0].shape))
-print("Training Set:   {} samples".format(len(X_train)))
-
-# Get 10 unique numbers from the validation set
-unique_labels, indices = np.unique(y_train, return_index=True)
-unique_x = X_train[indices]
+from util import get_data, show_numbers, show_latent_space, linear_interp, sample_latent_space
 # %%
 
 
-# Function that shows input images
-def show_numbers(images):
-    f, ax = plt.subplots(1, len(images))
-
-    for i in range(len(images)):
-        ax[i].set_xticks([])
-        ax[i].set_yticks([])
-        ax[i].imshow(images[i].squeeze(), cmap="gray")
-    plt.show()
-
-
-def show_numbers_ls(lspace):
-    plt.imshow([lspace], cmap="gray")
-    plt.xticks([])
-    plt.yticks([])
-    plt.show()
-
-
-def linear_interp(a, b, step = 10):
-    assert a.shape == b.shape
-    cc = np.zeros(shape=[step, a.shape[0]])
-    for c, i in zip(np.linspace(0, 1, step), range(len(cc))):
-        cc[i] = a + (b - a) * c
-
-    return cc
+# %% Get MNIST training data
+X_train, y_train, unique_x = get_data()
 
 # Show unique numbers from the dataset
+print("\nUnique numbers:")
 show_numbers(unique_x)
+# %%
 
 
 # %% Build the model
@@ -160,8 +125,10 @@ num_examples = len(X_train)
 print("Model built!")
 # %%
 
+
 # Load model
 saver.restore(sess, "./model/ae/model.ckpt")
+
 
 # %% Train the model
 EPOCHS = 64
@@ -184,6 +151,7 @@ for i in range(EPOCHS):
     print()
 # %%
 
+
 # %% Save tf model
 save_path = saver.save(sess, "./model/ae/model.ckpt")
 print("Model saved in file: %s" % save_path)
@@ -194,13 +162,13 @@ print("Model saved in file: %s" % save_path)
 lspace = sess.run(lsp, feed_dict={x: unique_x})
 
 print(" latent space: 0")
-show_numbers_ls(lspace[0])
+show_latent_space(lspace[0])
 
 print(" latent space: 3")
-show_numbers_ls(lspace[3])
+show_latent_space(lspace[3])
 
 print(" latent space: 9")
-show_numbers_ls(lspace[9])
+show_latent_space(lspace[9])
 # %%
 
 
@@ -220,8 +188,22 @@ show_numbers(sess.run(dec_image, feed_dict={lsp: lin_intrp}))
 
 
 # %% Latent space arithmetics
-show_numbers(sess.run(dec_image, feed_dict={lsp: np.stack((lspace[0] - lspace[8] + lspace[3], lspace[9] - lspace[1] + lspace[5]))}))
+show_numbers(sess.run(dec_image, feed_dict={lsp: np.stack((lspace[0],lspace[4], lspace[9], lspace[6], lspace[7], lspace[5]))}))
+show_numbers(sess.run(dec_image, feed_dict={lsp: np.stack((lspace[0] + lspace[4] - lspace[9], lspace[6] - lspace[7] + lspace[5]))}))
 # %%
+
+
+# %% Random sample new images
+print(" samples: 1")
+show_numbers(sess.run(dec_image, feed_dict={lsp: sample_latent_space(n_latent)}))
+
+print(" samples: 2")
+show_numbers(sess.run(dec_image, feed_dict={lsp: sample_latent_space(n_latent)}))
+
+print(" samples: 3")
+show_numbers(sess.run(dec_image, feed_dict={lsp: sample_latent_space(n_latent)}))
+# %%
+
 
 rndperm = np.random.permutation(10000)
 decomp_x = X_train[rndperm].squeeze().reshape(len(rndperm), 28*28)
