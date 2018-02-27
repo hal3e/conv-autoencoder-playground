@@ -5,58 +5,16 @@ from mpl_toolkits.mplot3d import Axes3D
 from tensorflow.examples.tutorials.mnist import input_data
 from sklearn.utils import shuffle
 import tensorflow as tf
+from util import get_data, show_numbers, show_latent_space, sample_latent_space, get_mesh_data, show_numbers_mehs
 # %%
 
-# %% Prepare data
-mnist = input_data.read_data_sets("MNIST_data/", reshape=False)
-X_train, y_train = mnist.train.images, mnist.train.labels
-
-assert(len(X_train) == len(y_train))
-
-print("Image Shape: {}".format(X_train[0].shape))
-print("Training Set:   {} samples".format(len(X_train)))
-
-# Get 10 unique numbers from the validation set
-unique_labels, indices = np.unique(y_train, return_index=True)
-unique_x = X_train[indices]
-# %%
-
-
-# Function that shows input images
-def show_numbers(images):
-    f, ax = plt.subplots(1, len(images))
-
-    for i in range(len(images)):
-        ax[i].set_xticks([])
-        ax[i].set_yticks([])
-        ax[i].imshow(images[i].squeeze(), cmap="gray")
-    plt.show()
-
-
-def show_numbers_ls(lspace):
-    plt.imshow([lspace], cmap="gray")
-    plt.xticks([])
-    plt.yticks([])
-    plt.show()
-
-
-def linear_interp(a, b, step = 10):
-    assert a.shape == b.shape
-    cc = np.zeros(shape=[step, a.shape[0]])
-    for c, i in zip(np.linspace(0, 1, step), range(len(cc))):
-        cc[i] = a + (b - a) * c
-
-    return cc
-
-def sample_ls(step = 10):
-    zs = np.zeros(shape=[step,n_latent])
-    for i in range(len(zs)):
-        zs[i] = np.random.normal(0, 1, n_latent)
-
-    return zs
+# %% Get MNIST training data
+X_train, y_train, unique_x = get_data()
 
 # Show unique numbers from the dataset
+print("\nUnique numbers:")
 show_numbers(unique_x)
+# %%
 
 
 # %% Build the model
@@ -115,7 +73,6 @@ def aencoder(x):
     # Sample latenst space
     return z, mu, var
 
-
 ct1_W = tf.Variable(tf.truncated_normal([3, 3, 64, 128], mean=mu_init, stddev=sigma_init))
 ct1_b = tf.Variable(tf.zeros(64))
 
@@ -156,7 +113,6 @@ def adecoder(ls):
     out = tf.nn.sigmoid(conv_t_3)
     return out
 
-
 x = tf.placeholder(tf.float32, (None, 28, 28, 1))
 
 z, mu_, var_ = aencoder(x)
@@ -179,11 +135,13 @@ num_examples = len(X_train)
 print("Model built!")
 # %%
 
+
 # Load model
 saver.restore(sess, "./model/vae/model.ckpt")
 
+
 # %% Train the model
-EPOCHS = 16
+EPOCHS = 28
 BATCH_SIZE = 256
 # sess.run(tf.global_variables_initializer())
 print("Training...")
@@ -196,13 +154,14 @@ for i in range(EPOCHS):
         l, _ = sess.run([cost, train_op], feed_dict={x: batch_x, learning_rate: 0.0001})
         loss_per_epoch += l / (float(num_examples)/BATCH_SIZE)
 
-    d_img, r_img = sess.run([dec_image, dec_sampled], feed_dict={x: unique_x, z_sampled: sample_ls()})
+    d_img, r_img = sess.run([dec_image, dec_sampled], feed_dict={x: unique_x, z_sampled: sample_latent_space(n_latent)})
     show_numbers(d_img)
     show_numbers(r_img)
     print("EPOCH {} ...".format(i+1))
     print("Loss = {:.3f}".format(loss_per_epoch))
     print()
 # %%
+
 
 # %% Save tf model
 save_path = saver.save(sess, "./model/vae/model.ckpt")
@@ -214,37 +173,43 @@ print("Model saved in file: %s" % save_path)
 lspace = sess.run(mu_, feed_dict={x: unique_x})
 
 print(" latent space: 0")
-show_numbers_ls(lspace[0])
+show_latent_space(lspace[0])
 
 print(" latent space: 3")
-show_numbers_ls(lspace[3])
+show_latent_space(lspace[3])
 
 print(" latent space: 9")
-show_numbers_ls(lspace[9])
+show_latent_space(lspace[9])
 # %%
 
 # %% Random sample new images
-r_img = sess.run(dec_sampled, feed_dict={z_sampled: sample_ls()})
 print(" samples: 1")
-show_numbers(r_img)
+show_numbers(sess.run(dec_sampled, feed_dict={z_sampled: sample_latent_space(n_latent)}))
 
-r_img = sess.run(dec_sampled, feed_dict={z_sampled: sample_ls()})
 print(" samples: 2")
-show_numbers(r_img)
+show_numbers(sess.run(dec_sampled, feed_dict={z_sampled: sample_latent_space(n_latent)}))
 
-r_img = sess.run(dec_sampled, feed_dict={z_sampled: sample_ls()})
 print(" samples: 3")
-show_numbers(r_img)
+show_numbers(sess.run(dec_sampled, feed_dict={z_sampled: sample_latent_space(n_latent)}))
 # %%
 
 
+# %% Visualize samples from latent space
+show_numbers_mehs(sess.run(dec_sampled, feed_dict={z_sampled: get_mesh_data(zero_axis=0)}))
+
+show_numbers_mehs(sess.run(dec_sampled, feed_dict={z_sampled: get_mesh_data(zero_axis=1)}))
+
+show_numbers_mehs(sess.run(dec_sampled, feed_dict={z_sampled: get_mesh_data(zero_axis=2)}))
+# %%
+
+
+# %% Visualize latent distribution
 rndperm = np.random.permutation(10000)
 encode_x = X_train[rndperm]
 encode_y = y_train[rndperm]
 
 encode_x = sess.run(mu_, feed_dict={x: encode_x})
 
-# %%
 f = plt.figure(figsize=(15,5))
 ax1 = f.add_subplot(1, 2, 1, projection='3d')
 ax1.scatter(encode_x[:, 0], encode_x[:, 1], encode_x[:, 2], c=encode_y, cmap='Spectral', s=8)

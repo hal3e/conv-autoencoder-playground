@@ -66,7 +66,6 @@ def aencoder(x):
 
     return latent_space
 
-
 ct1_W = tf.Variable(tf.truncated_normal([3, 3, 32, 64], mean=mu_init, stddev=sigma_init))
 ct1_b = tf.Variable(tf.zeros(32))
 
@@ -106,7 +105,6 @@ def adecoder(ls):
 
     out = tf.nn.sigmoid(conv_t_3)
     return out
-
 
 x = tf.placeholder(tf.float32, (None, 28, 28, 1))
 
