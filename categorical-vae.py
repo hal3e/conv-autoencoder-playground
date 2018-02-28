@@ -5,73 +5,17 @@ from mpl_toolkits.mplot3d import Axes3D
 from tensorflow.examples.tutorials.mnist import input_data
 from sklearn.utils import shuffle
 import tensorflow as tf
+from util import get_data_label, show_numbers, show_latent_space, sample_latent_space, get_mesh_data, show_numbers_mesh, create_one_hot
 # %%
 
-# %% Prepare data
-mnist = input_data.read_data_sets("MNIST_data/", reshape=False, one_hot=True)
-X_train, y_train = mnist.train.images, mnist.train.labels
 
-assert(len(X_train) == len(y_train))
-y_train = y_train.astype(np.float32)
-
-print("Image Shape: {}".format(X_train[0].shape))
-print("Training Set:   {} samples".format(len(X_train)))
-
-# Get 10 unique numbers from the validation set
-unique_x = X_train[[ 7,  4, 13,  1,  2, 27,  3,  0,  5,  8]]
-unique_c = y_train[[ 7,  4, 13,  1,  2, 27,  3,  0,  5,  8]]
-# %%
-
-# Function that shows input images
-def show_numbers(images):
-    f, ax = plt.subplots(1, len(images))
-
-    for i in range(len(images)):
-        ax[i].set_xticks([])
-        ax[i].set_yticks([])
-        ax[i].imshow(images[i].squeeze(), cmap="gray")
-    f.subplots_adjust(wspace=0, hspace=0)
-    plt.show()
-
-
-def show_numbers_ls(lspace):
-    plt.imshow([lspace], cmap="gray")
-    plt.xticks([])
-    plt.yticks([])
-    plt.show()
-
-
-def linear_interp(a, b, step = 10):
-    assert a.shape == b.shape
-    cc = np.zeros(shape=[step, a.shape[0]])
-    for c, i in zip(np.linspace(0, 1, step), range(len(cc))):
-        cc[i] = a + (b - a) * c
-
-    return cc
-
-def sample_z(step = 10):
-    zs = np.zeros(shape=[step,n_latent])
-    for i in range(len(zs)):
-        zs[i] = np.random.normal(0, 1, n_latent)
-
-    return zs
-
-
-def create_one_hot(n_clusters, cluster_i, step=10):
-    assert cluster_i > -1 and cluster_i < n_clusters
-
-    y_temp = np.zeros([n_clusters])
-    y_temp[cluster_i] = 1
-    return np.tile(y_temp, [step, 1])
-
-
-def show_samples_from_clusters(step=10, n_clusters=10):
-    for i in range(n_clusters):
-        r_img = sess.run(dec_sampled, feed_dict={z_sampled: sample_z(step), cluster: create_one_hot(n_clusters, i, step)})
-        show_numbers(r_img)
+# %% Get MNIST training data
+X_train, y_train, unique_x, unique_c = get_data_label()
 
 # Show unique numbers from the dataset
+print("\nUnique numbers:")
 show_numbers(unique_x)
+# %%
 
 
 # %% Build the model
@@ -125,12 +69,11 @@ def aencoder(x):
     mu  = tf.matmul(conv3_f, mu_W) + mu_b
     var  = tf.matmul(conv3_f, var_W) + var_b
 
+    # Sample latent space
     eps = tf.random_normal(tf.shape(var))
     z = mu + tf.multiply(eps, tf.exp(0.5 * var))
 
-    # Sample latenst space
     return z, mu, var
-
 
 ct1_W = tf.Variable(tf.truncated_normal([3, 3, 64, 128], mean=mu_init, stddev=sigma_init))
 ct1_b = tf.Variable(tf.zeros(64))
@@ -172,7 +115,6 @@ def adecoder(ls):
     out = tf.nn.sigmoid(conv_t_3)
     return out
 
-
 x = tf.placeholder(tf.float32, (None, 28, 28, 1))
 cluster = tf.placeholder(tf.float32, (None, n_clusters))
 
@@ -182,6 +124,7 @@ z_cluster = tf.concat([z, cluster], axis=1)
 dec_image = adecoder(z_cluster)
 
 z_sampled = tf.placeholder(tf.float32, (None, n_latent))
+
 ls_sampled = tf.concat([z_sampled, cluster], axis=1)
 
 dec_sampled = adecoder(ls_sampled)
@@ -200,8 +143,10 @@ num_examples = len(X_train)
 print("Model built!")
 # %%
 
+
 # Load model
 saver.restore(sess, "./model/cvae/model.ckpt")
+
 
 # %% Train the model
 EPOCHS = 64
@@ -218,13 +163,14 @@ for i in range(EPOCHS):
         l, _ = sess.run([cost, train_op], feed_dict={x: batch_x, cluster: batch_y, learning_rate: 0.001})
         loss_per_epoch += l / (float(num_examples)/BATCH_SIZE)
 
-    d_img, r_img = sess.run([dec_image, dec_sampled], feed_dict={x: unique_x, cluster: unique_c, z_sampled: sample_z()})
+    d_img, r_img = sess.run([dec_image, dec_sampled], feed_dict={x: unique_x, cluster: unique_c, z_sampled: sample_latent_space(n_latent, step=10)})
     show_numbers(d_img)
     show_numbers(r_img)
     print("EPOCH {} ...".format(i+1))
     print("Loss = {:.3f}".format(loss_per_epoch))
     print()
 # %%
+
 
 # %% Save tf model
 save_path = saver.save(sess, "./model/cvae/model.ckpt")
@@ -236,27 +182,40 @@ print("Model saved in file: %s" % save_path)
 lspace = sess.run(mu_, feed_dict={x: unique_x})
 
 print(" latent space: 0")
-show_numbers_ls(lspace[0])
+show_latent_space(lspace[0])
 
 print(" latent space: 3")
-show_numbers_ls(lspace[3])
+show_latent_space(lspace[3])
 
 print(" latent space: 9")
-show_numbers_ls(lspace[9])
-# %%
-
-# %% Random sample new images
-show_samples_from_clusters(step=10, n_clusters=n_clusters)
+show_latent_space(lspace[9])
 # %%
 
 
+# %% Random sample new images based on different clusters
+for i in range(n_clusters):
+    print(" samples cluster: {}".format(i))
+    r_img = sess.run(dec_sampled, feed_dict={z_sampled: sample_latent_space(n_latent, step=10), cluster: create_one_hot(n_clusters, i, step=10)})
+    show_numbers(r_img)
+# %%
+
+
+# %% Visualize samples from latent space
+show_numbers_mesh(sess.run(dec_sampled, feed_dict={z_sampled: get_mesh_data(zero_axis=1), cluster: create_one_hot(n_clusters, 0, 15*15)}))
+
+show_numbers_mesh(sess.run(dec_sampled, feed_dict={z_sampled: get_mesh_data(zero_axis=1), cluster: create_one_hot(n_clusters, 5, 15*15)}))
+
+show_numbers_mesh(sess.run(dec_sampled, feed_dict={z_sampled: get_mesh_data(zero_axis=1), cluster: create_one_hot(n_clusters, 9, 15*15)}))
+# %%
+
+
+# %% Visualize latent distribution
 rndperm = np.random.permutation(10000)
 encode_x = X_train[rndperm]
 encode_y = np.where(y_train[rndperm] == 1)[1]
 
 encoded_mu = sess.run(mu_, feed_dict={x: encode_x})
 
-# %%
 f = plt.figure(figsize=(15,5))
 ax1 = f.add_subplot(1, 2, 1, projection='3d')
 ax1.scatter(encoded_mu[:, 0], encoded_mu[:, 1], encoded_mu[:, 2], c=encode_y, cmap='Spectral', s=8)
@@ -268,7 +227,7 @@ plt.show()
 # %%
 
 
-# %% Visualize only one cluster
+# %% Visualize two clusters
 extract = np.where((encode_y == 9) | (encode_y == 0))
 encoded_mu_c = encoded_mu[extract]
 encode_y_c = encode_y[extract]

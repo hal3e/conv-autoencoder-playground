@@ -5,8 +5,9 @@ from mpl_toolkits.mplot3d import Axes3D
 from tensorflow.examples.tutorials.mnist import input_data
 from sklearn.utils import shuffle
 import tensorflow as tf
-from util import get_data, show_numbers, show_latent_space, sample_latent_space, get_mesh_data, show_numbers_mehs
+from util import get_data, show_numbers, show_latent_space, sample_latent_space, get_mesh_data, show_numbers_mesh
 # %%
+
 
 # %% Get MNIST training data
 X_train, y_train, unique_x = get_data()
@@ -67,10 +68,10 @@ def aencoder(x):
     mu  = tf.matmul(conv3_f, mu_W) + mu_b
     var  = tf.matmul(conv3_f, var_W) + var_b
 
+    # Sample latent space
     eps = tf.random_normal(tf.shape(var))
     z = mu + tf.multiply(eps, tf.exp(0.5 * var))
 
-    # Sample latenst space
     return z, mu, var
 
 ct1_W = tf.Variable(tf.truncated_normal([3, 3, 64, 128], mean=mu_init, stddev=sigma_init))
@@ -154,7 +155,7 @@ for i in range(EPOCHS):
         l, _ = sess.run([cost, train_op], feed_dict={x: batch_x, learning_rate: 0.0001})
         loss_per_epoch += l / (float(num_examples)/BATCH_SIZE)
 
-    d_img, r_img = sess.run([dec_image, dec_sampled], feed_dict={x: unique_x, z_sampled: sample_latent_space(n_latent)})
+    d_img, r_img = sess.run([dec_image, dec_sampled], feed_dict={x: unique_x, z_sampled: sample_latent_space(n_latent, step=10)})
     show_numbers(d_img)
     show_numbers(r_img)
     print("EPOCH {} ...".format(i+1))
@@ -182,24 +183,25 @@ print(" latent space: 9")
 show_latent_space(lspace[9])
 # %%
 
+
 # %% Random sample new images
 print(" samples: 1")
-show_numbers(sess.run(dec_sampled, feed_dict={z_sampled: sample_latent_space(n_latent)}))
+show_numbers(sess.run(dec_sampled, feed_dict={z_sampled: sample_latent_space(n_latent, step=10)}))
 
 print(" samples: 2")
-show_numbers(sess.run(dec_sampled, feed_dict={z_sampled: sample_latent_space(n_latent)}))
+show_numbers(sess.run(dec_sampled, feed_dict={z_sampled: sample_latent_space(n_latent, step=10)}))
 
 print(" samples: 3")
-show_numbers(sess.run(dec_sampled, feed_dict={z_sampled: sample_latent_space(n_latent)}))
+show_numbers(sess.run(dec_sampled, feed_dict={z_sampled: sample_latent_space(n_latent, step=10)}))
 # %%
 
 
 # %% Visualize samples from latent space
-show_numbers_mehs(sess.run(dec_sampled, feed_dict={z_sampled: get_mesh_data(zero_axis=0)}))
+show_numbers_mesh(sess.run(dec_sampled, feed_dict={z_sampled: get_mesh_data(zero_axis=0)}))
 
-show_numbers_mehs(sess.run(dec_sampled, feed_dict={z_sampled: get_mesh_data(zero_axis=1)}))
+show_numbers_mesh(sess.run(dec_sampled, feed_dict={z_sampled: get_mesh_data(zero_axis=1)}))
 
-show_numbers_mehs(sess.run(dec_sampled, feed_dict={z_sampled: get_mesh_data(zero_axis=2)}))
+show_numbers_mesh(sess.run(dec_sampled, feed_dict={z_sampled: get_mesh_data(zero_axis=2)}))
 # %%
 
 
@@ -208,14 +210,30 @@ rndperm = np.random.permutation(10000)
 encode_x = X_train[rndperm]
 encode_y = y_train[rndperm]
 
-encode_x = sess.run(mu_, feed_dict={x: encode_x})
+encoded_mu = sess.run(mu_, feed_dict={x: encode_x})
 
 f = plt.figure(figsize=(15,5))
 ax1 = f.add_subplot(1, 2, 1, projection='3d')
-ax1.scatter(encode_x[:, 0], encode_x[:, 1], encode_x[:, 2], c=encode_y, cmap='Spectral', s=8)
+ax1.scatter(encoded_mu[:, 0], encoded_mu[:, 1], encoded_mu[:, 2], c=encode_y, cmap='Spectral', s=8)
 
 ax2 = f.add_subplot(1, 2, 2)
-sp2 = ax2.scatter(encode_x[:, 0], encode_x[:, 1], c=encode_y, cmap='Spectral', s=8)
+sp2 = ax2.scatter(encoded_mu[:, 0], encoded_mu[:, 1], c=encode_y, cmap='Spectral', s=8)
+f.colorbar(sp2)
+plt.show()
+# %%
+
+
+# %% Visualize two clusters
+extract = np.where((encode_y == 9) | (encode_y == 0))
+encoded_mu_c = encoded_mu[extract]
+encode_y_c = encode_y[extract]
+encoded_mu_c.shape
+f = plt.figure(figsize=(15,5))
+ax1 = f.add_subplot(1, 2, 1, projection='3d')
+ax1.scatter(encoded_mu_c[:, 0], encoded_mu_c[:, 1], encoded_mu_c[:, 2], c=encode_y_c, cmap='Spectral', s=8)
+
+ax2 = f.add_subplot(1, 2, 2)
+sp2 = ax2.scatter(encoded_mu_c[:, 0], encoded_mu_c[:, 1], c=encode_y_c, cmap='Spectral', s=8)
 f.colorbar(sp2)
 plt.show()
 # %%
